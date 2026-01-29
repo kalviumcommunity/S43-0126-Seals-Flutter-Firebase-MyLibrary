@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/book_model.dart';
+import '../services/reservation_service.dart';
 
 class BookDetailScreen extends StatelessWidget {
   final Book book;
@@ -8,6 +9,8 @@ class BookDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ReservationService reservationService = ReservationService();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Book Details')),
       body: Padding(
@@ -17,13 +20,20 @@ class BookDetailScreen extends StatelessWidget {
           children: [
             Text(
               book.title,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 10),
             Text('Author: ${book.author}'),
+            const SizedBox(height: 10),
+            Text(
+              'Available: ${book.availableCopies} / ${book.totalCopies}',
+            ),
             const SizedBox(height: 20),
             Text(
-              book.isAvailable ? 'Status: Available' : 'Status: Reserved',
+              book.isAvailable ? 'Status: Available' : 'Status: Out of Stock',
               style: TextStyle(
                 color: book.isAvailable ? Colors.green : Colors.red,
                 fontSize: 16,
@@ -31,7 +41,27 @@ class BookDetailScreen extends StatelessWidget {
             ),
             const Spacer(),
             ElevatedButton(
-              onPressed: book.isAvailable ? () {} : null,
+              onPressed: book.isAvailable
+                  ? () async {
+                      try {
+                        await reservationService.reserveBook(book.id);
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Book reserved successfully'),
+                          ),
+                        );
+
+                        Navigator.pop(context); // back to list
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(e.toString()),
+                          ),
+                        );
+                      }
+                    }
+                  : null,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 50),
               ),
