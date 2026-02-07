@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "704338864570",
+    "project_id": "mylibrary-beba9",
+    "storage_bucket": "mylibrary-beba9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:704338864570:android:37001645c1e886fea21583",
+        "android_client_info": {
+          "package_name": "com.example.client"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBKpGC7x4sVjs0wmyPkw2M3eYOLFP2pTJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
