@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/reservation_service.dart';
+import '../models/reservation_model.dart';
 
 class MyReservationsScreen extends StatelessWidget {
   MyReservationsScreen({super.key});
@@ -27,54 +28,76 @@ class MyReservationsScreen extends StatelessWidget {
             );
           }
 
-          final reservations = snapshot.data!.docs;
+          final docs = snapshot.data!.docs;
 
           return ListView.builder(
-            itemCount: reservations.length,
+            itemCount: docs.length,
             itemBuilder: (context, index) {
-              final data = reservations[index].data() as Map<String, dynamic>;
+              final reservation = Reservation.fromFirestore(
+                docs[index] as DocumentSnapshot<Map<String, dynamic>>,
+              );
 
               return Card(
                 margin: const EdgeInsets.all(10),
                 child: ListTile(
                   leading: const Icon(Icons.book),
                   title: Text(
-                    'Book ID: ${data['bookId']}',
+                    reservation.bookTitle,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  subtitle: Text('Status: ${data['status']}'),
-                  trailing: data['status'] == 'active'
-                      ? ElevatedButton(
-                          onPressed: () async {
-                            try {
-                              await _reservationService.returnBook(
-                                reservationId: reservations[index].id,
-                                bookId: data['bookId'],
-                              );
-
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Book returned successfully'),
-                                ),
-                              );
-                            } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(e.toString())),
-                              );
-                            }
-                          },
-                          child: const Text('Return'),
-                        )
-                      : const Text(
-                          'Returned',
-                          style: TextStyle(color: Colors.grey),
-                        ),
+                  subtitle: Text(
+                    'Status: ${reservation.status.name}',
+                  ),
+                  trailing: _buildActionButton(
+                    context,
+                    reservation,
+                  ),
                 ),
               );
             },
           );
         },
       ),
+    );
+  }
+
+  Widget _buildActionButton(
+    BuildContext context,
+    Reservation reservation,
+  ) {
+    if (reservation.status == ReservationStatus.active) {
+      return ElevatedButton(
+        onPressed: () async {
+          try {
+            await _reservationService.requestReturn(
+              reservationId: reservation.id,
+            );
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Return request sent to admin'),
+              ),
+            );
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(e.toString())),
+            );
+          }
+        },
+        child: const Text('Request Return'),
+      );
+    }
+
+    if (reservation.status == ReservationStatus.returnRequested) {
+      return const Text(
+        'Waiting for approval',
+        style: TextStyle(color: Colors.orange),
+      );
+    }
+
+    return const Text(
+      'Completed',
+      style: TextStyle(color: Colors.grey),
     );
   }
 }

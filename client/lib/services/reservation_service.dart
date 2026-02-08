@@ -5,7 +5,71 @@ class ReservationService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  Future<void> reserveBook(String bookId) async {
+  Future<void> requestReturn({required String reservationId}) async {
+    await FirebaseFirestore.instance
+        .collection('reservations')
+        .doc(reservationId)
+        .update({
+          'status': 'returnRequested',
+          'returnRequestedAt': Timestamp.now(),
+        });
+  }
+
+  Future<bool> _isAdmin() async {
+    final user = FirebaseAuth.instance.currentUser!;
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    return doc.data()?['role'] == 'admin';
+  }
+
+  Future<void> approveReturn({
+  required String reservationId,
+}) async {
+  final isAdmin = await _isAdmin();
+  if (!isAdmin) {
+    throw Exception('Only admin can approve returns');
+  }
+
+  final reservationRef =
+      FirebaseFirestore.instance.collection('reservations').doc(reservationId);
+
+  await FirebaseFirestore.instance.runTransaction((transaction) async {
+    final reservationSnap = await transaction.get(reservationRef);
+    final data = reservationSnap.data();
+
+    if (data == null) {
+      throw Exception('Reservation not found');
+    }
+
+    final String bookId = data['bookId'];
+
+    final bookRef =
+        FirebaseFirestore.instance.collection('books').doc(bookId);
+
+    final bookSnap = await transaction.get(bookRef);
+    final int availableCopies = bookSnap['availableCopies'];
+
+    // increment inventory
+    transaction.update(bookRef, {
+      'availableCopies': availableCopies + 1,
+    });
+
+    // complete reservation
+    transaction.update(reservationRef, {
+      'status': 'completed',
+      'approvedAt': Timestamp.now(),
+    });
+  });
+}
+
+
+  Future<void> reserveBook({
+    required String bookId,
+    required String bookTitle,
+  }) async {
     final user = _auth.currentUser;
     if (user == null) {
       throw Exception('User not logged in');
@@ -28,7 +92,8 @@ class ReservationService {
       transaction.set(reservationRef, {
         'userId': user.uid,
         'bookId': bookId,
-        'reservedAt': FieldValue.serverTimestamp(),
+        'bookTitle': bookTitle,
+        'reservedAt': Timestamp.now(),
         'status': 'active',
       });
     });
@@ -42,29 +107,5 @@ class ReservationService {
         .snapshots();
   }
 
-  Future<void> returnBook({
-    required String reservationId,
-    required String bookId,
-  }) async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw Exception('User not logged in');
-    }
-
-    final bookRef = _db.collection('books').doc(bookId);
-    final reservationRef = _db.collection('reservations').doc(reservationId);
-
-    await _db.runTransaction((transaction) async {
-      final bookSnapshot = await transaction.get(bookRef);
-
-      final int availableCopies = bookSnapshot['availableCopies'];
-
-      transaction.update(bookRef, {'availableCopies': availableCopies + 1});
-
-      transaction.update(reservationRef, {
-        'status': 'returned',
-        'returnedAt': FieldValue.serverTimestamp(),
-      });
-    });
-  }
+  
 }

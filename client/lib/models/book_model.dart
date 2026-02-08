@@ -22,11 +22,11 @@ class Book {
 
     return Book(
       id: doc.id,
-      title: data['title'],
-      author: data['author'],
-      description: data['description'],
-      totalCopies: data['totalCopies'],
-      availableCopies: data['availableCopies'],
+      title: data['title'] as String,
+      author: data['author'] as String,
+      description: data['description'] ?? '',
+      totalCopies: data['totalCopies'] as int,
+      availableCopies: data['availableCopies'] as int,
     );
   }
 

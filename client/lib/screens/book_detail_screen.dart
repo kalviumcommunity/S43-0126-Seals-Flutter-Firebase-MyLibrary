@@ -20,17 +20,12 @@ class BookDetailScreen extends StatelessWidget {
           children: [
             Text(
               book.title,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             Text('Author: ${book.author}'),
             const SizedBox(height: 10),
-            Text(
-              'Available: ${book.availableCopies} / ${book.totalCopies}',
-            ),
+            Text('Available: ${book.availableCopies} / ${book.totalCopies}'),
             const SizedBox(height: 20),
             Text(
               book.isAvailable ? 'Status: Available' : 'Status: Out of Stock',
@@ -44,7 +39,10 @@ class BookDetailScreen extends StatelessWidget {
               onPressed: book.isAvailable
                   ? () async {
                       try {
-                        await reservationService.reserveBook(book.id);
+                        await reservationService.reserveBook(
+                          bookId: book.id,
+                          bookTitle: book.title,
+                        );
 
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -54,11 +52,9 @@ class BookDetailScreen extends StatelessWidget {
 
                         Navigator.pop(context); // back to list
                       } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(e.toString()),
-                          ),
-                        );
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text(e.toString())));
                       }
                     }
                   : null,
