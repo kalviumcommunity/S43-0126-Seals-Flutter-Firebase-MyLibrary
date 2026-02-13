@@ -3,10 +3,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/reservation_service.dart';
 import '../models/reservation_model.dart';
 
-class MyReservationsScreen extends StatelessWidget {
+class MyReservationsScreen extends StatefulWidget {
   MyReservationsScreen({super.key});
 
+  @override
+  State<MyReservationsScreen> createState() => _MyReservationsScreenState();
+}
+
+class _MyReservationsScreenState extends State<MyReservationsScreen> {
   final ReservationService _reservationService = ReservationService();
+
+  @override
+  void initState() {
+    super.initState();
+    // Expire stale reservations when the screen is loaded
+    _reservationService.expireStaleReservations();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,10 +60,7 @@ class MyReservationsScreen extends StatelessWidget {
                   subtitle: Text(
                     'Status: ${reservation.status.name}',
                   ),
-                  trailing: _buildActionButton(
-                    context,
-                    reservation,
-                  ),
+                  trailing: _buildActionButton(context, reservation),
                 ),
               );
             },
@@ -65,29 +74,25 @@ class MyReservationsScreen extends StatelessWidget {
     BuildContext context,
     Reservation reservation,
   ) {
-    if (reservation.status == ReservationStatus.active) {
+    // Issued → student can request return
+    if (reservation.status == ReservationStatus.issued) {
       return ElevatedButton(
         onPressed: () async {
-          try {
-            await _reservationService.requestReturn(
-              reservationId: reservation.id,
-            );
+          await _reservationService.requestReturn(
+            reservationId: reservation.id,
+          );
 
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Return request sent to admin'),
-              ),
-            );
-          } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(e.toString())),
-            );
-          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Return request sent to admin'),
+            ),
+          );
         },
         child: const Text('Request Return'),
       );
     }
 
+    // Waiting admin
     if (reservation.status == ReservationStatus.returnRequested) {
       return const Text(
         'Waiting for approval',
@@ -95,6 +100,23 @@ class MyReservationsScreen extends StatelessWidget {
       );
     }
 
+    // Reserved but not issued
+    if (reservation.status == ReservationStatus.reserved) {
+      return const Text(
+        'Reserved (collect within 24h)',
+        style: TextStyle(color: Colors.blue),
+      );
+    }
+
+    // Expired
+    if (reservation.status == ReservationStatus.expired) {
+      return const Text(
+        'Reservation expired',
+        style: TextStyle(color: Colors.red),
+      );
+    }
+
+    // Completed
     return const Text(
       'Completed',
       style: TextStyle(color: Colors.grey),

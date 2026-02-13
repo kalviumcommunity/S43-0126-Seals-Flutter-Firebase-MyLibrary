@@ -3,19 +3,34 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/reservation_model.dart';
 import '../services/reservation_service.dart';
 
-class AdminReturnRequestsScreen extends StatelessWidget {
+class AdminReturnRequestsScreen extends StatefulWidget {
   const AdminReturnRequestsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final ReservationService reservationService = ReservationService();
+  State<AdminReturnRequestsScreen> createState() => _AdminReturnRequestsScreenState();
+}
 
+class _AdminReturnRequestsScreenState extends State<AdminReturnRequestsScreen> {
+  final ReservationService reservationService = ReservationService();
+
+  @override
+  void initState() {
+    super.initState();
+    // Expire stale reservations when the screen is loaded
+    reservationService.expireStaleReservations();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Return Requests')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
             .collection('reservations')
-            .where('status', isEqualTo: 'returnRequested')
+            .where(
+              'status',
+              whereIn: ['reserved', 'returnRequested'],
+            )
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -40,20 +55,36 @@ class AdminReturnRequestsScreen extends StatelessWidget {
                     leading: const Icon(Icons.assignment_return),
                     title: Text(reservation.bookTitle),
                     subtitle: Text('User: ${reservation.userId}'),
-                    trailing: ElevatedButton(
-                      child: const Text('Approve'),
-                      onPressed: () async {
-                        await reservationService.approveReturn(
-                          reservationId: reservation.id,
-                        );
+                    trailing: reservation.status == ReservationStatus.reserved
+                        ? ElevatedButton(
+                            child: const Text('Issue'),
+                            onPressed: () async {
+                              await reservationService.issueBook(
+                                reservationId: reservation.id,
+                              );
 
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Return approved'),
-                          ),
-                        );
-                      },
-                    ),
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Book issued')),
+                              );
+                            },
+                          )
+                        : reservation.status ==
+                              ReservationStatus.returnRequested
+                        ? ElevatedButton(
+                            child: const Text('Approve Return'),
+                            onPressed: () async {
+                              await reservationService.approveReturn(
+                                reservationId: reservation.id,
+                              );
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Return approved'),
+                                ),
+                              );
+                            },
+                          )
+                        : null,
                   ),
                 );
               } catch (e) {

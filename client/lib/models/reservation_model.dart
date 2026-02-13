@@ -1,10 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum ReservationStatus {
-  active,
+  reserved,
+  issued,
   returnRequested,
-  returnApproved,
   completed,
+  expired,
 }
 
 class Reservation {
@@ -58,7 +59,7 @@ class Reservation {
   static ReservationStatus _statusFromString(String value) {
     return ReservationStatus.values.firstWhere(
       (e) => e.name == value,
-      orElse: () => ReservationStatus.active,
+      orElse: () => ReservationStatus.reserved,
     );
   }
 }
