@@ -7,6 +7,7 @@ class Book {
   final String description;
   final int totalCopies;
   final int availableCopies;
+  final String? imageUrl;
 
   Book({
     required this.id,
@@ -15,6 +16,7 @@ class Book {
     required this.description,
     required this.totalCopies,
     required this.availableCopies,
+    this.imageUrl,
   });
 
   factory Book.fromFirestore(DocumentSnapshot doc) {
@@ -27,6 +29,7 @@ class Book {
       description: data['description'] ?? '',
       totalCopies: data['totalCopies'] as int,
       availableCopies: data['availableCopies'] as int,
+      imageUrl: data['imageUrl'], // 👈 NEW (optional)
     );
   }
 

@@ -1,31 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/reservation_service.dart';
-import '../models/reservation_model.dart';
 
-class MyReservationsScreen extends StatefulWidget {
-  MyReservationsScreen({super.key});
-
-  @override
-  State<MyReservationsScreen> createState() => _MyReservationsScreenState();
-}
-
-class _MyReservationsScreenState extends State<MyReservationsScreen> {
-  final ReservationService _reservationService = ReservationService();
-
-  @override
-  void initState() {
-    super.initState();
-    // Expire stale reservations when the screen is loaded
-    _reservationService.expireStaleReservations();
-  }
+class MyReservationsScreen extends StatelessWidget {
+  const MyReservationsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    
+    final service = ReservationService();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('My Reservations')),
+      appBar: AppBar(
+        title: const Text('My Activity'),
+      ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: _reservationService.myReservations(),
+        stream: service.myReservations(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -34,33 +24,107 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(
               child: Text(
-                'No reservations yet',
+                'No activity yet',
                 style: TextStyle(fontSize: 16),
               ),
             );
           }
 
-          final docs = snapshot.data!.docs;
+          final reservations = snapshot.data!.docs;
 
           return ListView.builder(
-            itemCount: docs.length,
+            padding: const EdgeInsets.all(12),
+            itemCount: reservations.length,
             itemBuilder: (context, index) {
-              final reservation = Reservation.fromFirestore(
-                docs[index] as DocumentSnapshot<Map<String, dynamic>>,
-              );
+              final doc = reservations[index];
+              final data = doc.data() as Map<String, dynamic>;
+
+              final status = data['status'] as String;
+              final bookTitle = data['bookTitle'] ?? 'Unknown Book';
+
+              final Timestamp? issuedAt = data['issuedAt'];
+              final Timestamp? dueAt = data['dueAt'];
 
               return Card(
-                margin: const EdgeInsets.all(10),
-                child: ListTile(
-                  leading: const Icon(Icons.book),
-                  title: Text(
-                    reservation.bookTitle,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 📘 BOOK TITLE
+                      Text(
+                        bookTitle,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // 🏷 STATUS CHIP
+                      _StatusChip(status: status),
+
+                      const SizedBox(height: 12),
+
+                      // ⏳ TIMELINE INFO
+                      if (status == 'issued' && dueAt != null)
+                        Row(
+                          children: [
+                            const Icon(Icons.schedule, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Due: ${dueAt.toDate().toLocal()}',
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          ],
+                        ),
+
+                      if (status == 'returnRequested')
+                        const Text(
+                          'Waiting for admin approval',
+                          style: TextStyle(color: Colors.orange),
+                        ),
+
+                      if (status == 'completed')
+                        const Text(
+                          'Book returned successfully',
+                          style: TextStyle(color: Colors.green),
+                        ),
+
+                      if (status == 'expired')
+                        const Text(
+                          'Reservation expired',
+                          style: TextStyle(color: Colors.red),
+                        ),
+
+                      // 🔘 RETURN BUTTON (ONLY WHEN ISSUED)
+                      if (status == 'issued')
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            icon: const Icon(Icons.assignment_return),
+                            label: const Text('Request Return'),
+                            onPressed: () async {
+                              await service.requestReturn(
+                                reservationId: doc.id,
+                              );
+
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Return request sent',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                    ],
                   ),
-                  subtitle: Text(
-                    'Status: ${reservation.status.name}',
-                  ),
-                  trailing: _buildActionButton(context, reservation),
                 ),
               );
             },
@@ -69,57 +133,50 @@ class _MyReservationsScreenState extends State<MyReservationsScreen> {
       ),
     );
   }
+}
 
-  Widget _buildActionButton(
-    BuildContext context,
-    Reservation reservation,
-  ) {
-    // Issued → student can request return
-    if (reservation.status == ReservationStatus.issued) {
-      return ElevatedButton(
-        onPressed: () async {
-          await _reservationService.requestReturn(
-            reservationId: reservation.id,
-          );
+class _StatusChip extends StatelessWidget {
+  final String status;
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Return request sent to admin'),
-            ),
-          );
-        },
-        child: const Text('Request Return'),
-      );
+  const _StatusChip({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    late Color color;
+    late String label;
+
+    switch (status) {
+      case 'reserved':
+        color = Colors.amber;
+        label = 'Reserved';
+        break;
+      case 'issued':
+        color = Colors.blue;
+        label = 'Issued';
+        break;
+      case 'returnRequested':
+        color = Colors.orange;
+        label = 'Return Requested';
+        break;
+      case 'completed':
+        color = Colors.green;
+        label = 'Completed';
+        break;
+      case 'expired':
+        color = Colors.red;
+        label = 'Expired';
+        break;
+      default:
+        color = Colors.grey;
+        label = status;
     }
 
-    // Waiting admin
-    if (reservation.status == ReservationStatus.returnRequested) {
-      return const Text(
-        'Waiting for approval',
-        style: TextStyle(color: Colors.orange),
-      );
-    }
-
-    // Reserved but not issued
-    if (reservation.status == ReservationStatus.reserved) {
-      return const Text(
-        'Reserved (collect within 24h)',
-        style: TextStyle(color: Colors.blue),
-      );
-    }
-
-    // Expired
-    if (reservation.status == ReservationStatus.expired) {
-      return const Text(
-        'Reservation expired',
-        style: TextStyle(color: Colors.red),
-      );
-    }
-
-    // Completed
-    return const Text(
-      'Completed',
-      style: TextStyle(color: Colors.grey),
+    return Chip(
+      label: Text(
+        label,
+        style: const TextStyle(color: Colors.white),
+      ),
+      backgroundColor: color,
     );
   }
 }

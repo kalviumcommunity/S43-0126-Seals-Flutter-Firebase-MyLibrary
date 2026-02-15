@@ -6,35 +6,22 @@ class ReservationService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   Future<void> expireStaleReservations() async {
-    final now = Timestamp.now();
+  final now = Timestamp.now();
 
-    final query = await FirebaseFirestore.instance
-        .collection('reservations')
-        .where('status', isEqualTo: 'reserved')
-        .where('expiresAt', isLessThan: now)
-        .get();
+  final query = await _db
+      .collection('reservations')
+      .where('status', isEqualTo: 'reserved')
+      .where('expiresAt', isLessThan: now)
+      .get();
 
-    for (final doc in query.docs) {
-      final data = doc.data();
-      final String bookId = data['bookId'];
-
-      final reservationRef = FirebaseFirestore.instance
-          .collection('reservations')
-          .doc(doc.id);
-      final bookRef = FirebaseFirestore.instance
-          .collection('books')
-          .doc(bookId);
-
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final bookSnap = await transaction.get(bookRef);
-        final int availableCopies = bookSnap['availableCopies'];
-
-        transaction.update(bookRef, {'availableCopies': availableCopies + 1});
-
-        transaction.update(reservationRef, {'status': 'expired'});
-      });
-    }
+  for (final doc in query.docs) {
+    await doc.reference.update({
+      'status': 'expired',
+      'expiredAt': Timestamp.now(),
+    });
   }
+}
+
 
   Future<void> requestReturn({required String reservationId}) async {
     await FirebaseFirestore.instance
@@ -83,6 +70,19 @@ class ReservationService {
         throw Exception('Only reserved books can be issued');
       }
 
+      final String bookId = data['bookId'];
+      final bookRef = FirebaseFirestore.instance
+          .collection('books')
+          .doc(bookId);
+      final bookSnap = await transaction.get(bookRef);
+      final int availableCopies = bookSnap['availableCopies'];
+
+      // hold the book
+      transaction.update(bookRef, {
+        'availableCopies': availableCopies - 1,
+      });
+
+      // create reservation (NOT issued yet)
       transaction.update(reservationRef, {
         'status': 'issued',
         'issuedAt': now,
@@ -129,36 +129,32 @@ class ReservationService {
     });
   }
 
-  Future<void> reserveBook({
-    required String bookId,
-    required String bookTitle,
-  }) async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw Exception('User not logged in');
-    }
+ Future<void> reserveBook({
+  required String bookId,
+  required String bookTitle,
+}) async {
+  final user = _auth.currentUser;
+  if (user == null) {
+    throw Exception('User not logged in');
+  }
 
-    final bookRef = _db.collection('books').doc(bookId);
-    final reservationRef = _db.collection('reservations').doc();
+  final bookRef = _db.collection('books').doc(bookId);
+  final reservationRef = _db.collection('reservations').doc();
 
-    final now = Timestamp.now();
-    final expiresAt = Timestamp.fromMillisecondsSinceEpoch(
-      now.millisecondsSinceEpoch + Duration(hours: 24).inMilliseconds,
-    );
+  final now = Timestamp.now();
+  final expiresAt = Timestamp.fromMillisecondsSinceEpoch(
+    now.millisecondsSinceEpoch + const Duration(hours: 24).inMilliseconds,
+  );
 
+  try {
     await _db.runTransaction((transaction) async {
       final bookSnap = await transaction.get(bookRef);
-
       final int availableCopies = bookSnap['availableCopies'];
 
       if (availableCopies <= 0) {
         throw Exception('No copies available');
       }
 
-      // hold the book
-      transaction.update(bookRef, {'availableCopies': availableCopies - 1});
-
-      // create reservation (NOT issued yet)
       transaction.set(reservationRef, {
         'userId': user.uid,
         'bookId': bookId,
@@ -168,7 +164,11 @@ class ReservationService {
         'expiresAt': expiresAt,
       });
     });
+  } catch (e) {
+    rethrow; // 🔥 REQUIRED for UX feedback
   }
+}
+
 
   Stream<QuerySnapshot> myReservations() {
     final user = _auth.currentUser;
